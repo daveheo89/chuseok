@@ -270,6 +270,7 @@
       <button class="tab-btn active" data-tab="catalog">카탈로그</button>
       <button class="tab-btn" data-tab="order">특판 주문</button>
     </div>
+    <a class="admin-link" data-tab="admin">관리자</a>
   </div>
 </nav>
 
@@ -405,6 +406,42 @@
   </div>
 </div>
 
+<!-- ================= ADMIN TAB ================= -->
+<div id="tab-admin" class="tabpanel order-tab">
+  <section class="order-hero">
+    <div class="wrap">
+      <h1>관리자 화면</h1>
+      <p>비밀번호로 보호된 화면입니다. 추천 상품 지정과 받은 주문 파일 취합을 여기서 처리하세요.</p>
+    </div>
+  </section>
+  <div class="wrap order-body">
+
+    <div class="panel">
+      <h3><div class="section-tick"></div>추천 상품 지정</h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">체크한 상품이 카탈로그 상단 "추천 상품"에 노출됩니다. 저장하면 새 버전의 페이지 파일이 다운로드되니, 그 파일로 깃허브의 index.html을 교체해주세요.</p>
+      <div id="recAdminWrap"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="saveRecBtn">추천 상품 반영 파일 다운로드</button>
+        <span id="recSaveStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><div class="section-tick"></div>받은 주문 파일 취합</h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">손님들이 보내주신 주문서 엑셀 파일을 한 번에 여러 개 올리면, 하나로 합쳐서 합계와 함께 보여드려요.</p>
+      <div class="btn-row">
+        <input type="file" id="adminFileInput" accept=".xlsx" multiple>
+      </div>
+      <span id="adminUploadStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
+      <div id="adminOrdersWrap" style="margin-top:14px;"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="adminExportBtn" style="display:none;">합쳐서 엑셀 다운로드</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <footer>2026 추석 선물세트 · 문의는 담당 채널로 연락해주세요</footer>
 
 <script>
@@ -503,15 +540,20 @@ document.querySelector('.order-cta').addEventListener('click', () => {
   switchTab('order');
   window.scrollTo({top: 0, behavior: 'smooth'});
 });
+document.querySelector('.admin-link').addEventListener('click', () => switchTab('admin'));
 
 function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('tab-catalog').classList.toggle('active', tab === 'catalog');
   document.getElementById('tab-order').classList.toggle('active', tab === 'order');
+  document.getElementById('tab-admin').classList.toggle('active', tab === 'admin');
   document.getElementById('tab-catalog').style.display = (tab === 'catalog') ? '' : 'none';
+  if(tab === 'admin') loadAdmin();
 }
 document.getElementById('tab-order').classList.remove('order-tab');
 document.getElementById('tab-order').classList.add('order-tab');
+document.getElementById('tab-admin').classList.remove('order-tab');
+document.getElementById('tab-admin').classList.add('order-tab');
 
 /* ---------------- order parsing (shared by both entry modes) ---------------- */
 let parsedRows = [];
@@ -770,6 +812,98 @@ function saveBlob(blob, filename){
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/* ---------------- admin ---------------- */
+let adminLoaded = false;
+const ADMIN_PASSWORD = '202609';
+function loadAdmin(){
+  if(adminLoaded) return;
+  const pw = prompt('관리자 비밀번호를 입력해주세요');
+  if(pw !== ADMIN_PASSWORD){
+    alert('비밀번호가 올바르지 않습니다.');
+    switchTab('catalog');
+    return;
+  }
+  adminLoaded = true;
+  renderRecAdmin();
+}
+
+function renderRecAdmin(){
+  const wrap = document.getElementById('recAdminWrap');
+  let html = '';
+  SUBCATS.forEach(sc => {
+    const items = PRODUCTS.filter(p => p.subcat === sc);
+    html += '<div class="rec-admin-group"><h4>' + sc + '</h4><div class="rec-admin-list">' +
+      items.map(p => '<label class="rec-admin-item"><input type="checkbox" data-code="' + p.code + '"' +
+        (RECOMMENDED.has(p.code) ? ' checked' : '') + '><span class="code-badge">' + p.code + '</span><span class="nm">' +
+        escapeHtml(p.name) + '</span></label>').join('') +
+      '</div></div>';
+  });
+  wrap.innerHTML = html;
+}
+
+document.getElementById('saveRecBtn').addEventListener('click', () => {
+  const statusEl = document.getElementById('recSaveStatus');
+  const checked = Array.from(document.querySelectorAll('#recAdminWrap input[type=checkbox]:checked')).map(el => el.dataset.code);
+  try{
+    let html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    html = html.replace(/let RECOMMENDED = new Set\(\[[^\]]*\]\);/, 'let RECOMMENDED = new Set(' + JSON.stringify(checked) + ');');
+    const blob = new Blob([html], {type:'text/html'});
+    saveBlob(blob, 'index.html');
+    statusEl.textContent = '다운로드된 index.html로 깃허브 파일을 교체해주세요 (' + checked.length + '개 추천 상품).';
+  }catch(e){
+    statusEl.textContent = '파일 생성 중 문제가 발생했습니다.';
+  }
+});
+
+document.getElementById('adminFileInput').addEventListener('change', async (ev) => {
+  const files = Array.from(ev.target.files || []);
+  const statusEl = document.getElementById('adminUploadStatus');
+  const wrap = document.getElementById('adminOrdersWrap');
+  const exportBtn = document.getElementById('adminExportBtn');
+  if(files.length === 0) return;
+  let allRows = [];
+  let failCount = 0;
+  for(const file of files){
+    try{
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, {defval:''});
+      json.forEach(r => allRows.push(r));
+    }catch(e){ failCount++; }
+  }
+  if(allRows.length === 0){
+    statusEl.textContent = '읽을 수 있는 주문 데이터가 없습니다.';
+    return;
+  }
+  let total = 0;
+  let rowsHtml = '';
+  allRows.forEach(r => {
+    const qty = Number(r['수량']) || 0;
+    const product = PRODUCTS.find(p => p.name === r['상품명']);
+    const price = product ? priceOf(product) : null;
+    const lineTotal = price != null ? price * qty : 0;
+    total += lineTotal;
+    rowsHtml += '<tr><td>' + escapeHtml(r['주문자 성함']||'') + '</td><td>' + escapeHtml(r['주문자 연락처']||'') +
+      '</td><td>' + escapeHtml(r['수령인 성함']||'') + '</td><td>' + escapeHtml(r['수령인 연락처']||'') +
+      '</td><td>' + escapeHtml(r['수령인 우편번호']||'') + '</td><td>' + escapeHtml(r['수령인 주소']||'') +
+      '</td><td>' + escapeHtml(r['상품명']||'') + '</td><td class="num">' + qty +
+      '</td><td class="num">' + (price != null ? won(lineTotal) : '가격 문의') + '</td></tr>';
+  });
+  statusEl.textContent = files.length + '개 파일 · ' + allRows.length + '행 취합 · 합계 ' + won(total) + (failCount ? ' · ' + failCount + '개 파일 읽기 실패' : '');
+  wrap.innerHTML = '<table class="preview"><thead><tr><th>주문자</th><th>연락처</th><th>수령인</th><th>수령인연락처</th><th>우편번호</th><th>주소</th><th>상품명</th><th>수량</th><th>소계</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+  exportBtn.style.display = '';
+  exportBtn.onclick = () => {
+    const ws = XLSX.utils.json_to_sheet(allRows);
+    const wbOut = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbOut, ws, '취합주문');
+    const arrayBuf = XLSX.write(wbOut, {type:'array', bookType:'xlsx'});
+    const blob = new Blob([arrayBuf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    saveBlob(blob, '취합_주문내역.xlsx');
+  };
+  ev.target.value = '';
+});
 
 renderCatalog();
 </script>
