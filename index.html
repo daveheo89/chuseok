@@ -196,6 +196,12 @@
     cursor:pointer;transition:background .18s ease,color .18s ease;
   }
   .mode-btn.active{background:var(--night);color:var(--white);}
+  .bulk-sub-btn{border:1px solid var(--line);background:var(--white);padding:7px 16px;border-radius:16px;
+    font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:12.5px;color:var(--ink-soft);cursor:pointer;margin-right:6px;}
+  .bulk-sub-btn.active{background:var(--night);color:var(--white);border-color:var(--night);}
+  #bulkGridTable input, #bulkGridTable select{width:100%;padding:5px 6px;border:1px solid var(--line);
+    border-radius:var(--radius);font-family:inherit;font-size:12px;background:var(--paper);}
+  #bulkGridTable .row-del-btn{font-size:16px;}
   select#dProduct{
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius);
     font-family:inherit;font-size:14px;background:var(--paper);
@@ -432,15 +438,37 @@
     </div>
 
     <div class="panel" id="bulkModePanel" style="display:none;">
-      <h3><div class="section-tick"></div>엑셀로 대량 등록</h3>
-      <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">양식을 내려받아 수령인 명단을 채운 뒤, 그 파일을 그대로 업로드해주세요. 헤더 이름으로 자동 인식되어 열 순서는 상관없고, 우편번호는 비워두셔도 됩니다. 업로드하면 기존 목록은 새 파일 내용으로 바뀝니다.</p>
-      <div class="btn-row">
-        <button class="btn btn-ghost" id="downloadTemplateBtn">양식 다운로드 (.xlsx)</button>
+      <h3><div class="section-tick"></div>대량 주문 등록</h3>
+      <div class="mode-tabs" style="margin-bottom:16px;">
+        <button class="bulk-sub-btn active" data-bulksub="grid">표로 직접 입력</button>
+        <button class="bulk-sub-btn" data-bulksub="excel">엑셀 업로드</button>
       </div>
-      <div class="btn-row">
-        <input type="file" id="bulkFileInput" accept=".xlsx">
+
+      <div id="bulkGridSub">
+        <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">줄마다 상품을 드롭다운으로 클릭해서 고르시면 돼요. "줄 추가"로 필요한 만큼 늘려주세요.</p>
+        <div style="overflow-x:auto;">
+          <table class="preview" id="bulkGridTable">
+            <thead><tr><th style="min-width:90px;">성함</th><th style="min-width:110px;">연락처</th><th style="min-width:80px;">우편번호</th><th style="min-width:70px;"></th><th style="min-width:140px;">기본주소</th><th style="min-width:120px;">상세주소</th><th style="min-width:220px;">상품</th><th style="min-width:70px;">수량</th><th></th></tr></thead>
+            <tbody id="bulkGridBody"></tbody>
+          </table>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="bulkGridAddRowBtn">+ 줄 추가</button>
+          <button class="btn btn-primary" id="bulkGridSubmitBtn">표 내용 등록</button>
+          <span id="bulkGridStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
+        </div>
       </div>
-      <span id="bulkStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
+
+      <div id="bulkExcelSub" style="display:none;">
+        <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">양식을 내려받아 수령인 명단을 채운 뒤, 그 파일을 그대로 업로드해주세요. 헤더 이름으로 자동 인식되어 열 순서는 상관없고, 우편번호는 비워두셔도 됩니다. 업로드하면 기존 목록은 새 파일 내용으로 바뀝니다.</p>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="downloadTemplateBtn">양식 다운로드 (.xlsx)</button>
+        </div>
+        <div class="btn-row">
+          <input type="file" id="bulkFileInput" accept=".xlsx">
+        </div>
+        <span id="bulkStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
+      </div>
     </div>
 
     <div class="panel" id="previewPanel" style="display:none;">
@@ -716,8 +744,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 });
 
 /* ----- small mode: direct input ----- */
-function populateProductSelect(){
-  const sel = document.getElementById('dProduct');
+function productSelectOptionsHtml(){
   let html = '';
   SUBCATS.forEach(sc => {
     html += '<optgroup label="' + sc + '">';
@@ -727,7 +754,10 @@ function populateProductSelect(){
     });
     html += '</optgroup>';
   });
-  sel.innerHTML = html;
+  return html;
+}
+function populateProductSelect(){
+  document.getElementById('dProduct').innerHTML = productSelectOptionsHtml();
 }
 
 document.getElementById('addrSearchBtn').addEventListener('click', () => {
@@ -769,6 +799,92 @@ document.getElementById('addRecipientBtn').addEventListener('click', () => {
   document.getElementById('dQty').value = '1';
   document.getElementById('dName').focus();
   renderPreview();
+});
+
+/* ----- bulk mode: sub-tab switching ----- */
+document.querySelectorAll('.bulk-sub-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.bulk-sub-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const sub = btn.dataset.bulksub;
+    document.getElementById('bulkGridSub').style.display = (sub === 'grid') ? '' : 'none';
+    document.getElementById('bulkExcelSub').style.display = (sub === 'excel') ? '' : 'none';
+  });
+});
+
+/* ----- bulk mode: table grid entry ----- */
+let bulkRowCounter = 0;
+function addBulkGridRow(){
+  const id = 'bg' + (++bulkRowCounter);
+  const tr = document.createElement('tr');
+  tr.dataset.rowId = id;
+  tr.innerHTML =
+    '<td><input class="bg-name" placeholder="성함"></td>' +
+    '<td><input class="bg-phone" placeholder="010-0000-0000"></td>' +
+    '<td><input class="bg-zip" placeholder="자동입력" readonly></td>' +
+    '<td><button type="button" class="btn btn-ghost bg-addr-search">검색</button></td>' +
+    '<td><input class="bg-addr" placeholder="주소 검색" readonly></td>' +
+    '<td><input class="bg-addr-detail" placeholder="동/호수"></td>' +
+    '<td><select class="bg-product">' + productSelectOptionsHtml() + '</select></td>' +
+    '<td><input class="bg-qty" type="number" min="1" value="1"></td>' +
+    '<td><button type="button" class="row-del-btn bg-del">×</button></td>';
+  document.getElementById('bulkGridBody').appendChild(tr);
+}
+document.getElementById('bulkGridAddRowBtn').addEventListener('click', addBulkGridRow);
+addBulkGridRow();
+addBulkGridRow();
+addBulkGridRow();
+
+document.getElementById('bulkGridBody').addEventListener('click', (ev) => {
+  if(ev.target.classList.contains('bg-del')){
+    ev.target.closest('tr').remove();
+    return;
+  }
+  if(ev.target.classList.contains('bg-addr-search')){
+    if(typeof daum === 'undefined' || !daum.Postcode){
+      alert('주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    const tr = ev.target.closest('tr');
+    new daum.Postcode({
+      oncomplete: function(data){
+        tr.querySelector('.bg-zip').value = data.zonecode || '';
+        tr.querySelector('.bg-addr').value = data.roadAddress || data.jibunAddress || '';
+        tr.querySelector('.bg-addr-detail').focus();
+      }
+    }).open();
+  }
+});
+
+document.getElementById('bulkGridSubmitBtn').addEventListener('click', () => {
+  const statusEl = document.getElementById('bulkGridStatus');
+  const trs = Array.from(document.querySelectorAll('#bulkGridBody tr'));
+  let added = 0, skippedEmpty = 0, errorCount = 0;
+  trs.forEach(tr => {
+    const name = tr.querySelector('.bg-name').value.trim();
+    const phone = tr.querySelector('.bg-phone').value.trim();
+    const zip = tr.querySelector('.bg-zip').value.trim();
+    const baseAddr = tr.querySelector('.bg-addr').value.trim();
+    const detailAddr = tr.querySelector('.bg-addr-detail').value.trim();
+    const addr = (baseAddr + ' ' + detailAddr).trim();
+    const code = tr.querySelector('.bg-product').value;
+    const qty = tr.querySelector('.bg-qty').value;
+    if(!name && !phone && !addr){ skippedEmpty++; return; }
+    const row = buildRow(name, phone, zip, addr, code, qty, 'bulkgrid');
+    if(row.error) errorCount++;
+    parsedRows.push(row);
+    added++;
+  });
+  if(added === 0){
+    statusEl.textContent = '등록할 내용이 없습니다.';
+    return;
+  }
+  statusEl.textContent = added + '줄 등록 · ' + (errorCount ? errorCount + '건 확인 필요' : '전부 정상 인식');
+  document.getElementById('bulkGridBody').innerHTML = '';
+  addBulkGridRow();
+  addBulkGridRow();
+  addBulkGridRow();
+  renderPreview();
+  document.getElementById('previewPanel').scrollIntoView({behavior:'smooth', block:'start'});
 });
 
 /* ----- bulk mode: excel template + upload ----- */
