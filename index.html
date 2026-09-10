@@ -234,6 +234,9 @@
   .rec-admin-item input{flex:0 0 auto;}
   .rec-admin-item .code-badge{flex:0 0 auto;}
   .rec-admin-item span.nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .order-block{border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;background:var(--white);}
+  .order-block-head{font-size:13.5px;margin-bottom:8px;}
+  .tracking-input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius);font-family:inherit;font-size:12.5px;background:var(--paper);}
 
   .order-cta{
     display:block;width:100%;text-align:left;cursor:pointer;
@@ -272,6 +275,7 @@
       <button class="tab-btn active" data-tab="catalog">카탈로그</button>
       <button class="tab-btn" data-tab="order">특판 주문</button>
     </div>
+    <a class="admin-link" data-tab="lookup">주문 조회</a>
     <a class="admin-link" data-tab="admin">관리자</a>
   </div>
 </nav>
@@ -410,6 +414,32 @@
       <div id="submitResult" style="margin-top:16px;"></div>
     </div>
 
+  </div>
+</div>
+
+<!-- ================= LOOKUP TAB ================= -->
+<div id="tab-lookup" class="tabpanel order-tab">
+  <section class="order-hero">
+    <div class="wrap">
+      <h1>주문 조회</h1>
+      <p>주문 시 받으신 주문번호와 주문자 연락처를 입력하면 진행 상황과 송장번호를 확인할 수 있어요.</p>
+    </div>
+  </section>
+  <div class="wrap order-body">
+    <div class="panel">
+      <div class="field-row">
+        <div class="field"><label for="lookupCode">주문번호</label><input id="lookupCode" placeholder="예: A7F3K2"></div>
+        <div class="field"><label for="lookupPhone">주문자 연락처</label><input id="lookupPhone" placeholder="010-0000-0000"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="lookupBtn">조회</button>
+        <span id="lookupStatus" style="font-size:12.5px;color:var(--ink-soft);"></span>
+      </div>
+    </div>
+    <div class="panel" id="lookupResultPanel" style="display:none;">
+      <h3><div class="section-tick"></div>주문 내역</h3>
+      <div id="lookupResultWrap"></div>
+    </div>
   </div>
 </div>
 
@@ -567,13 +597,15 @@ document.querySelector('.order-cta').addEventListener('click', () => {
   switchTab('order');
   window.scrollTo({top: 0, behavior: 'smooth'});
 });
-document.querySelector('.admin-link').addEventListener('click', () => switchTab('admin'));
+document.querySelector('.admin-link[data-tab="admin"]').addEventListener('click', () => switchTab('admin'));
+document.querySelector('.admin-link[data-tab="lookup"]').addEventListener('click', () => switchTab('lookup'));
 
 function switchTab(tab){
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   document.getElementById('tab-catalog').classList.toggle('active', tab === 'catalog');
   document.getElementById('tab-order').classList.toggle('active', tab === 'order');
   document.getElementById('tab-admin').classList.toggle('active', tab === 'admin');
+  document.getElementById('tab-lookup').classList.toggle('active', tab === 'lookup');
   document.getElementById('tab-catalog').style.display = (tab === 'catalog') ? '' : 'none';
   if(tab === 'admin') loadAdmin();
 }
@@ -581,6 +613,8 @@ document.getElementById('tab-order').classList.remove('order-tab');
 document.getElementById('tab-order').classList.add('order-tab');
 document.getElementById('tab-admin').classList.remove('order-tab');
 document.getElementById('tab-admin').classList.add('order-tab');
+document.getElementById('tab-lookup').classList.remove('order-tab');
+document.getElementById('tab-lookup').classList.add('order-tab');
 
 /* ---------------- order parsing (shared by both entry modes) ---------------- */
 let parsedRows = [];
@@ -774,6 +808,13 @@ document.getElementById('ordererPhone').addEventListener('input', renderPreview)
 populateProductSelect();
 
 /* ---------------- submit ---------------- */
+function genOrderCode(){
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let s = '';
+  for(let i=0;i<6;i++) s += chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+
 document.getElementById('submitBtn').addEventListener('click', async () => {
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
@@ -782,10 +823,11 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
   const validRows = parsedRows.filter(r => !r.error).map(r => ({
     name: r.name, phone: r.phone, zip: r.zip, addr: r.addr,
     code: r.product.code, productName: r.product.name, qty: r.qty,
-    unitPrice: priceOf(r.product)
+    unitPrice: priceOf(r.product), trackingNumber: ''
   }));
 
   const order = {
+    orderCode: genOrderCode(),
     ordererName: document.getElementById('ordererName').value.trim(),
     ordererPhone: document.getElementById('ordererPhone').value.trim(),
     items: validRows,
@@ -823,10 +865,12 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
 
   const resultEl = document.getElementById('submitResult');
   if(saved){
-    resultEl.innerHTML = '<div class="confirm-box"><b>주문이 접수되었습니다.</b><br>합계 ' + won(order.grandTotal) +
-      ' · 수령인 ' + order.recipientCount + '명<br>위 계좌로 입금해주신 뒤, 입금 내역과 함께 <b>010-6508-5901</b>로 연락 주시면 확인 후 순차 발송해드립니다. (주문서 파일도 함께 다운로드되었어요)</div>';
+    resultEl.innerHTML = '<div class="confirm-box"><b>주문이 접수되었습니다.</b><br>' +
+      '<span style="font-size:22px;font-family:\'Noto Serif KR\',serif;font-weight:900;">주문번호 ' + order.orderCode + '</span><br>' +
+      '<span style="font-size:12.5px;">이 번호와 연락처(' + order.ordererPhone + ')를 저장해두시면, 상단 "주문 조회"에서 진행 상황과 송장번호를 확인하실 수 있어요.</span><br><br>' +
+      '합계 ' + won(order.grandTotal) + ' · 수령인 ' + order.recipientCount + '명<br>위 계좌로 입금해주신 뒤, 입금 내역과 함께 <b>010-6508-5901</b>로 연락 주시면 확인 후 순차 발송해드립니다. (주문서 파일도 함께 다운로드되었어요)</div>';
     btn.textContent = '제출 완료';
-    alert('입금 후 입금 내역과 함께 010-6508-5901로 연락 주세요.\n다운로드된 주문서 파일도 함께 보내주시면 확인이 더 빨라요.');
+    alert('주문번호: ' + order.orderCode + '\n이 번호를 꼭 저장해두세요 — 나중에 "주문 조회"에서 배송 상황을 확인하실 수 있어요.\n\n입금 후 입금 내역과 함께 010-6508-5901로 연락 주세요.');
   } else {
     resultEl.innerHTML = '<div class="notice"><span>⚠️</span><div>제출 처리에 실패했습니다. 다시 시도해주시거나, 담당자에게 직접 연락해주세요.</div></div>';
     btn.textContent = '주문 제출';
@@ -844,6 +888,41 @@ function saveBlob(blob, filename){
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/* ---------------- order lookup ---------------- */
+document.getElementById('lookupBtn').addEventListener('click', async () => {
+  const code = document.getElementById('lookupCode').value.trim().toUpperCase();
+  const phone = document.getElementById('lookupPhone').value.trim();
+  const statusEl = document.getElementById('lookupStatus');
+  const panel = document.getElementById('lookupResultPanel');
+  const wrap = document.getElementById('lookupResultWrap');
+  panel.style.display = 'none';
+  if(!code || !phone){
+    statusEl.textContent = '주문번호와 연락처를 모두 입력해주세요.';
+    return;
+  }
+  statusEl.textContent = '조회 중...';
+  try{
+    const snap = await fsdb.collection('orders').where('orderCode','==',code).where('ordererPhone','==',phone).get();
+    if(snap.empty){
+      statusEl.textContent = '일치하는 주문을 찾을 수 없습니다. 주문번호와 연락처를 다시 확인해주세요.';
+      return;
+    }
+    statusEl.textContent = '';
+    const o = snap.docs[0].data();
+    let rows = '';
+    (o.items||[]).forEach(it => {
+      rows += '<tr><td>' + escapeHtml(it.name) + '</td><td>' + escapeHtml(it.productName) + '</td><td class="num">' + it.qty +
+        '</td><td>' + (it.trackingNumber ? escapeHtml(it.trackingNumber) : '발송 준비중') + '</td></tr>';
+    });
+    wrap.innerHTML = '<p style="font-size:13px;color:var(--ink-soft);margin-top:0;">접수 ' + new Date(o.submittedAt).toLocaleString('ko-KR') +
+      ' · 합계 ' + won(o.grandTotal||0) + ' · 수령인 ' + (o.recipientCount||0) + '명</p>' +
+      '<table class="preview"><thead><tr><th>수령인</th><th>상품</th><th>수량</th><th>송장번호</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    panel.style.display = '';
+  }catch(e){
+    statusEl.textContent = '조회 중 문제가 발생했습니다.';
+  }
+});
 
 /* ---------------- admin ---------------- */
 let adminLoaded = false;
@@ -872,24 +951,34 @@ async function loadLiveOrders(){
       return;
     }
     let total = 0;
-    let rows = '';
+    let blocksHtml = '';
     const flatRows = [];
     snap.forEach(doc => {
       const o = doc.data();
+      const id = doc.id;
       total += o.grandTotal || 0;
-      rows += '<tr><td>' + new Date(o.submittedAt).toLocaleString('ko-KR') + '</td><td>' + escapeHtml(o.ordererName||'') +
-        '</td><td>' + escapeHtml(o.ordererPhone||'') + '</td><td>' + (o.recipientCount||0) + '명</td><td class="num">' + won(o.grandTotal||0) + '</td></tr>';
-      (o.items||[]).forEach(it => {
+      let itemRows = '';
+      (o.items||[]).forEach((it, idx) => {
+        itemRows += '<tr><td>' + escapeHtml(it.name) + '</td><td>' + escapeHtml(it.addr) + '</td><td>' + escapeHtml(it.productName) +
+          '</td><td class="num">' + it.qty + '</td><td><input type="text" class="tracking-input" data-order="' + id + '" data-idx="' + idx +
+          '" value="' + escapeHtml(it.trackingNumber||'') + '" placeholder="송장번호"></td></tr>';
         flatRows.push({
           '상품명': it.productName, '수량': it.qty,
           '주문자 성함': o.ordererName, '주문자 연락처': o.ordererPhone,
           '수령인 성함': it.name, '수령인 연락처': it.phone,
-          '수령인 우편번호': it.zip||'', '수령인 주소': it.addr
+          '수령인 우편번호': it.zip||'', '수령인 주소': it.addr, '송장번호': it.trackingNumber||''
         });
       });
+      blocksHtml += '<div class="order-block">' +
+        '<div class="order-block-head"><b>' + escapeHtml(o.ordererName||'') + '</b> (' + escapeHtml(o.ordererPhone||'') +
+        ') · 주문번호 ' + (o.orderCode||'-') + ' · ' + new Date(o.submittedAt).toLocaleString('ko-KR') + ' · 합계 ' + won(o.grandTotal||0) + '</div>' +
+        '<table class="preview"><thead><tr><th>수령인</th><th>주소</th><th>상품</th><th>수량</th><th>송장번호</th></tr></thead><tbody>' + itemRows + '</tbody></table>' +
+        '<div class="btn-row"><button class="btn btn-primary save-tracking-btn" data-order="' + id + '">송장번호 저장</button>' +
+        '<span class="tracking-save-status" data-order="' + id + '" style="font-size:12px;color:var(--ink-soft);"></span></div>' +
+      '</div>';
     });
     statusEl.textContent = snap.size + '건 접수 · 합계 ' + won(total);
-    wrap.innerHTML = '<table class="preview"><thead><tr><th>접수시각</th><th>주문자</th><th>연락처</th><th>수령인수</th><th>합계</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    wrap.innerHTML = blocksHtml;
     exportBtn.style.display = '';
     exportBtn.onclick = () => {
       const ws = XLSX.utils.json_to_sheet(flatRows);
@@ -979,6 +1068,28 @@ document.getElementById('adminFileInput').addEventListener('change', async (ev) 
     saveBlob(blob, '취합_주문내역.xlsx');
   };
   ev.target.value = '';
+});
+
+document.getElementById('liveAdminWrap').addEventListener('click', async (ev) => {
+  if(!ev.target.classList.contains('save-tracking-btn')) return;
+  const orderId = ev.target.dataset.order;
+  const statusEl = document.querySelector('.tracking-save-status[data-order="' + orderId + '"]');
+  const inputs = document.querySelectorAll('.tracking-input[data-order="' + orderId + '"]');
+  statusEl.textContent = '저장 중...';
+  try{
+    const docRef = fsdb.collection('orders').doc(orderId);
+    const snap = await docRef.get();
+    const o = snap.data();
+    const items = o.items || [];
+    inputs.forEach(inp => {
+      const idx = Number(inp.dataset.idx);
+      if(items[idx]) items[idx].trackingNumber = inp.value.trim();
+    });
+    await docRef.update({items});
+    statusEl.textContent = '저장되었습니다.';
+  }catch(e){
+    statusEl.textContent = '저장 실패';
+  }
 });
 
 renderCatalog();
