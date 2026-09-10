@@ -305,6 +305,14 @@
     .order-cta-sub{font-size:12.5px;}
   }
   footer{padding:26px 0 60px;text-align:center;color:var(--ink-soft);font-size:12px;}
+  .order-toast{
+    position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-20px);
+    background:var(--night);color:var(--white);padding:14px 22px;border-radius:8px;
+    font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,0.25);z-index:200;opacity:0;
+    transition:opacity .3s ease,transform .3s ease;text-align:center;max-width:90vw;
+  }
+  .order-toast b{color:var(--moon);}
+  .order-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
   @media(max-width:640px){
     .hero{padding:48px 0 40px;}
@@ -1163,19 +1171,84 @@ function loadAdmin(){
   }
   adminLoaded = true;
   renderRecAdmin();
-  loadLiveOrders();
+  if(typeof Notification !== 'undefined' && Notification.permission === 'default'){
+    Notification.requestPermission();
+  }
+  startLiveOrdersListener();
 }
 
-async function loadLiveOrders(){
+function playAlertSound(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.18].forEach(delay => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880;
+      const t = ctx.currentTime + delay;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.start(t);
+      o.stop(t + 0.3);
+    });
+  }catch(e){}
+}
+
+function showOrderToast(o){
+  const toast = document.createElement('div');
+  toast.className = 'order-toast';
+  toast.innerHTML = '<b>🔔 새 주문이 접수되었습니다</b><br>주문번호 ' + (o.orderCode||'-') + ' · ' +
+    escapeHtml(o.ordererName||'') + ' · ' + won(o.grandTotal||0);
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.classList.add('show'); }, 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 400);
+  }, 6000);
+}
+
+function notifyNewOrder(o){
+  playAlertSound();
+  showOrderToast(o);
+  if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
+    try{
+      new Notification('새 주문이 접수되었습니다', {
+        body: '주문번호 ' + (o.orderCode||'-') + ' · ' + (o.ordererName||'') + ' · ' + won(o.grandTotal||0)
+      });
+    }catch(e){}
+  }
+}
+
+let liveOrdersUnsub = null;
+let liveOrdersInitial = true;
+function startLiveOrdersListener(){
+  if(liveOrdersUnsub) return;
+  liveOrdersUnsub = fsdb.collection('orders').orderBy('submittedAt','desc').limit(500)
+    .onSnapshot(snap => {
+      renderLiveOrdersSnapshot(snap);
+      if(!liveOrdersInitial){
+        snap.docChanges().forEach(change => {
+          if(change.type === 'added') notifyNewOrder(change.doc.data());
+        });
+      }
+      liveOrdersInitial = false;
+    }, err => {
+      document.getElementById('liveAdminStatus').textContent = '실시간 연결 중 문제가 발생했습니다.';
+    });
+}
+
+function renderLiveOrdersSnapshot(snap){
   const statusEl = document.getElementById('liveAdminStatus');
   const wrap = document.getElementById('liveAdminWrap');
   const exportBtn = document.getElementById('liveExportBtn');
-  try{
-    const snap = await fsdb.collection('orders').orderBy('submittedAt','desc').limit(500).get();
-    if(snap.empty){
-      statusEl.textContent = '아직 접수된 주문이 없습니다.';
-      return;
-    }
+  if(snap.empty){
+    statusEl.textContent = '아직 접수된 주문이 없습니다.';
+    wrap.innerHTML = '';
+    exportBtn.style.display = 'none';
+    ['All','Unpaid','Paid','Sent','Tracked'].forEach(k => document.getElementById('stageCount'+k).textContent = '0');
+    return;
+  }
     let total = 0;
     let blocksHtml = '';
     const flatRows = [];
@@ -1229,9 +1302,6 @@ async function loadLiveOrders(){
       const blob = new Blob([arrayBuf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       saveBlob(blob, '접수_주문내역.xlsx');
     };
-  }catch(e){
-    statusEl.textContent = '불러오는 중 문제가 발생했습니다.';
-  }
 }
 
 function renderRecAdmin(){
@@ -1317,7 +1387,6 @@ document.getElementById('liveAdminWrap').addEventListener('click', async (ev) =>
     if(!confirm('이 주문을 삭제하시겠습니까? 되돌릴 수 없습니다.')) return;
     try{
       await fsdb.collection('orders').doc(orderId).delete();
-      loadLiveOrders();
     }catch(e){
       alert('삭제 중 문제가 발생했습니다.');
     }
@@ -1339,7 +1408,6 @@ document.getElementById('liveAdminWrap').addEventListener('click', async (ev) =>
     });
     await docRef.update({items});
     statusEl.textContent = '저장되었습니다.';
-    loadLiveOrders();
   }catch(e){
     statusEl.textContent = '저장 실패';
   }
@@ -1353,7 +1421,6 @@ document.getElementById('liveAdminWrap').addEventListener('change', async (ev) =
   const field = isPayment ? 'paymentConfirmed' : 'orderSent';
   try{
     await fsdb.collection('orders').doc(orderId).update({[field]: ev.target.checked});
-    loadLiveOrders();
   }catch(e){
     alert('저장 중 문제가 발생했습니다. 다시 시도해주세요.');
     ev.target.checked = !ev.target.checked;
