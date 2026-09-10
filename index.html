@@ -9,6 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --paper:#EFEAE0;
@@ -411,7 +413,7 @@
   <section class="order-hero">
     <div class="wrap">
       <h1>관리자 화면</h1>
-      <p>비밀번호로 보호된 화면입니다. 추천 상품 지정과 받은 주문 파일 취합을 여기서 처리하세요.</p>
+      <p>비밀번호로 보호된 화면입니다. 추천 상품 지정, 실시간 주문 확인, 보조 취합 도구를 여기서 처리하세요.</p>
     </div>
   </section>
   <div class="wrap order-body">
@@ -427,8 +429,17 @@
     </div>
 
     <div class="panel">
-      <h3><div class="section-tick"></div>받은 주문 파일 취합</h3>
-      <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">손님들이 보내주신 주문서 엑셀 파일을 한 번에 여러 개 올리면, 하나로 합쳐서 합계와 함께 보여드려요.</p>
+      <h3><div class="section-tick"></div>접수된 주문 (실시간)</h3>
+      <div id="liveAdminStatus" class="empty-note">불러오는 중...</div>
+      <div id="liveAdminWrap"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="liveExportBtn" style="display:none;">엑셀로 내보내기</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><div class="section-tick"></div>주문 파일 직접 취합 (보조)</h3>
+      <p style="font-size:13px;color:var(--ink-soft);margin-top:0;">전화·카톡 등으로 따로 받은 주문서 엑셀이 있다면, 여기 올려서 위 실시간 목록과 별도로 합계를 확인할 수 있어요.</p>
       <div class="btn-row">
         <input type="file" id="adminFileInput" accept=".xlsx" multiple>
       </div>
@@ -445,6 +456,17 @@
 <footer>2026 추석 선물세트 · 문의는 담당 채널로 연락해주세요</footer>
 
 <script>
+const firebaseConfig = {
+  apiKey: "AIzaSyDK3WYthbvDL_WVu1qeO0EI7PWyfFsDKCI",
+  authDomain: "chuseok-fc6f1.firebaseapp.com",
+  projectId: "chuseok-fc6f1",
+  storageBucket: "chuseok-fc6f1.firebasestorage.app",
+  messagingSenderId: "1008591232454",
+  appId: "1:1008591232454:web:473bb61550045b0476e6c7"
+};
+firebase.initializeApp(firebaseConfig);
+const fsdb = firebase.firestore();
+
 const PRODUCTS = [{"code":"H01","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 고려흑염소 진액골드(70ml X 30포)","spec":"70ml x 30포 (30일분)","retail":180000,"online":92050,"desc":"흑염소를 달여 70ml 파우치에 담은 30포 구성이에요. 데우거나 계량할 필요 없이 개별 포장을 뜯어 그대로 마시면 되고, 하루 한 포로 30일이 딱 떨어져요. 선물 박스 그대로 전달할 수 있어 명절 인사용으로 바로 씁니다.","supply":19000,"recommended":false},{"code":"H02","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 고려흑마늘 진액골드(70ml X 30포)","spec":"70ml x 30포 (30일분)","retail":89000,"online":40000,"desc":"생마늘이 아닌 숙성 흑마늘을 달여 70ml 파우치 30포로 구성했어요. 숙성을 거쳐 생마늘 특유의 매운맛과 향 부담이 덜하고, 개별 포장이라 휴대와 보관이 간편해 하루 한 포씩 30일을 이어가기 좋습니다.","supply":19000,"recommended":false},{"code":"H03","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 고려녹용홍삼골드 (70ml X 30포)","spec":"70ml x 30포 (30일분)","retail":89000,"online":39300,"desc":"홍삼과 녹용을 함께 담은 70ml 파우치 30포 구성이에요. 두 원물을 한 포에 합쳐 따로 챙길 필요가 없고, 골드 라인 선물 박스라 명절·감사 인사용으로 격을 갖춰 전달할 수 있는 30일분입니다.","supply":21400,"recommended":false},{"code":"H04","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 고려진홍삼 진액골드(50ml X 30포)","spec":"50ml x 30포 (30일분)","retail":89000,"online":37490,"desc":"홍삼을 진하게 달여 50ml 파우치 30포로 담았어요. 70ml보다 한 번에 마시기 부담이 적은 용량이라 남기지 않고 드시기 좋고, 하루 한 포 30일 구성이라 명절 선물로 기간이 딱 떨어집니다.","supply":22600,"recommended":false},{"code":"H05","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 포천 깊은산골 도라지배즙 (10ml X 32포)","spec":"10ml x 32포","retail":null,"online":45600,"desc":"도라지와 배를 함께 달여 10ml 스틱 32포에 담은 액상차예요. 한 포씩 개별 포장이라 계량 없이 뜯어 바로 마실 수 있고, 가방이나 서랍에 두고 환절기 내내 간편하게 챙기기 좋습니다.","supply":22600,"recommended":false},{"code":"H06","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 석류속에 콜라겐 프리미엄 (10ml X 32포)","spec":"10ml x 32포","retail":null,"online":55000,"desc":"석류 농축액에 콜라겐을 더해 10ml 스틱 32포로 담은 액상 제품이에요. 새콤달콤해 물 없이도 마시기 편하고, 개별 포장이라 사무실·여행 어디서든 꺼내 먹기 좋은 구성입니다.","supply":23700,"recommended":false},{"code":"H07","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 활력공진보 (30ml X 30포)","spec":"30ml x 30포 (30일분)","retail":null,"online":37250,"desc":"침향과 홍삼 등을 전통 제법으로 달여 30ml 스틱 30포에 담았어요. 하루 한 포로 30일이 딱 떨어지는 구성이고, 개별 포장이라 계량이나 보관 걱정 없이 그대로 드시면 되는 제품입니다.","supply":28400,"recommended":false},{"code":"H08","cat":"한방","subcat":"한방","name":"[개성홍삼농산]정삼원 타트체리와 콜라겐 (10ml X 32포)","spec":"10ml x 32포","retail":null,"online":55000,"desc":"타트체리 농축액에 콜라겐을 더해 10ml 스틱 32포로 담은 액상 제품이에요. 새콤한 맛이라 물 없이도 마시기 편하고, 개별 포장이라 자기 전 루틴으로 챙기기 좋은 구성입니다.","supply":22600,"recommended":false},{"code":"H09","cat":"한방","subcat":"한방","name":"[정원삼] 매일홍삼스틱 제로 30포 + 쇼핑백","spec":"15ml x 30포","retail":null,"online":26900,"desc":"국내산 6년근 홍삼농축액을 15ml 스틱 30포에 담은 식약처 인정 건강기능식품이에요. 당류·칼로리·콜레스테롤을 0으로 맞춘 제로 설계라 당 관리 중에도 부담이 덜하고, 물 없이 바로 섭취합니다.","supply":22600,"recommended":false},{"code":"H10","cat":"한방","subcat":"한방","name":"[정원삼] 홍삼석류스틱 밸런스","spec":"10g x 30포 (스틱형)","retail":null,"online":49800,"desc":"진세노사이드 48mg을 담은 10g 스틱 30포 건강기능식품이에요. 우수건강기능식품제조기준(GMP)과 우수농산물관리(GAP) 시설에서 만들고, 영지·둥굴레·두충·당귀·복분자 등 13가지 부원료를 함께 넣었습니다.","supply":22600,"recommended":false},{"code":"H12","cat":"한방","subcat":"한방","name":"[가희담] 녹용홍삼스틱 담 + 쇼핑백","spec":"10g x 30포","retail":null,"online":36410,"desc":"뉴질랜드산 녹용과 국내산 6년근 홍삼을 10g 스틱 30포에 담았어요. 침향·당귀·작약·천궁 등 11가지 전통원료를 함께 넣었고 HACCP 인증 시설에서 제조하며, 전용 쇼핑백이 포함된 선물 구성입니다.","supply":29600,"recommended":false},{"code":"H14","cat":"한방","subcat":"한방","name":"[안성마춤] 홍삼꿀청 550g*3","spec":"550g x 3병","retail":40000,"online":25000,"desc":"홍삼을 꿀에 재워 만든 청 타입 제품으로 550g 3병 대용량 구성이에요. 따뜻한 물에 타면 홍삼차가 되고 요거트·빵에 곁들이는 활용도 가능해, 온 가족이 나눠 드시기 좋은 용량입니다.","supply":22600,"recommended":false},{"code":"M01","cat":"식품","subcat":"정육/고기세트","name":"[제주햄] 제주 흑돼지 실속 선물세트 (6팩) 냉동 포장배송","spec":"고추장불고기 250g·간장불고기 250g·불고기소시지 250g·고사리소시지 250g·수제떡갈비 200g·수제돈가스 165g (각 1개 / 총 6팩)","retail":50800,"online":49500,"desc":"100% 제주산 흑돼지로 만든 6팩 냉동 선물세트입니다. 고추장·간장 불고기 각 250g, 불고기·고사리 소시지 각 250g, 수제떡갈비 200g, 수제돈가스 165g이 보냉백에 담깁니다.","supply":42300,"recommended":false},{"code":"M02","cat":"식품","subcat":"정육/고기세트","name":"[제주햄] 제주 흑돼지 프리미엄 선물세트 (9팩)냉동 포장배송","spec":"고추장불고기 250g·간장불고기 250g·고사리소시지 250g·윈너소시지 250g·불고기소시지 250g·치즈돈가스 165g·수제돈가스 165g 각 1개 + 수제떡갈비 200g 2개 (총 9팩)","retail":72800,"online":68800,"desc":"100% 제주산 흑돼지 9팩 냉동 선물세트입니다. 고추장·간장 불고기 각 250g, 수제떡갈비 200g 2개, 고사리·윈너·불고기 소시지 각 250g, 치즈·수제 돈가스 각 165g 구성입니다.","supply":55100,"recommended":false},{"code":"M03","cat":"식품","subcat":"정육/고기세트","name":"[제주햄] 제주 흑돼지 시그니처 선물세트 (8팩)냉동 포장배송","spec":"고추장불고기 250g·간장불고기 250g·고사리소시지 250g·불고기소시지 250g·수제돈가스 165g·슈바인학센(전·후족 랜덤) 각 1개 + 수제떡갈비 200g 2개 (총 8팩)","retail":94900,"online":90900,"desc":"100% 제주산 흑돼지 8팩 냉동 선물세트입니다. 고추장·간장 불고기 각 250g, 수제떡갈비 200g 2개, 고사리·불고기 소시지 각 250g, 수제돈가스 165g, 슈바인학센 1개 구성입니다.","supply":70400,"recommended":false},{"code":"M04","cat":"식품","subcat":"정육/고기세트","name":"[마음 1호] 불고기 300gx2, 국거리 300gx2","spec":"","retail":null,"online":null,"desc":"","supply":97000,"recommended":false},{"code":"M05","cat":"식품","subcat":"정육/고기세트","name":"[마음 2호] 불고기 300gx2, 국거리 300g, 산적 300g","spec":"","retail":null,"online":null,"desc":"","supply":97000,"recommended":false},{"code":"M06","cat":"식품","subcat":"정육/고기세트","name":"[마음 3호] 불고기 300gx2, 국거리 300g, 육전 300g","spec":"","retail":null,"online":null,"desc":"","supply":97000,"recommended":false},{"code":"M07","cat":"식품","subcat":"정육/고기세트","name":"[행복세트] 등심 250g, 채끝 250g, 불고기 300g, 국거리 300g","spec":"","retail":null,"online":null,"desc":"","supply":137000,"recommended":false},{"code":"M08","cat":"식품","subcat":"정육/고기세트","name":"[정육실속 1호] 불고기 400g, 국거리 400g","spec":"","retail":null,"online":null,"desc":"","supply":62000,"recommended":false},{"code":"M09","cat":"식품","subcat":"정육/고기세트","name":"[정육실속 2호] 불고기 400gx2, 국거리 400g","spec":"","retail":null,"online":null,"desc":"","supply":81000,"recommended":false},{"code":"M10","cat":"식품","subcat":"정육/고기세트","name":"[정육실속 3호] 불고기 400gx2, 국거리 400g, 산적 400g","spec":"","retail":null,"online":null,"desc":"","supply":99000,"recommended":false},{"code":"M11","cat":"식품","subcat":"정육/고기세트","name":"[정육모둠 한상차림] 불고기 180g, 국거리 180g, 산적 180g, 육전 180g","spec":"","retail":null,"online":null,"desc":"","supply":64000,"recommended":false},{"code":"M12","cat":"식품","subcat":"정육/고기세트","name":"[구이정육] 등심 180g, 늑간살 180g, 불고기 180g, 국거리 180g","spec":"","retail":null,"online":null,"desc":"","supply":93000,"recommended":false},{"code":"M13","cat":"식품","subcat":"정육/고기세트","name":"[1++ 정육 1호] 불고기 400g, 국거리 400g, 산적 400g","spec":"","retail":null,"online":null,"desc":"","supply":83000,"recommended":false},{"code":"M14","cat":"식품","subcat":"정육/고기세트","name":"[1++ 정육 2호] 불고기 400gx2, 국거리 400g, 산적 400g","spec":"","retail":null,"online":null,"desc":"","supply":101000,"recommended":false},{"code":"M15","cat":"식품","subcat":"정육/고기세트","name":"[1++ 등심정육 1호] 등심 400g, 불고기 400g, 국거리 400g","spec":"","retail":null,"online":null,"desc":"","supply":136000,"recommended":false},{"code":"M16","cat":"식품","subcat":"정육/고기세트","name":"[1++ 등심정육 2호] 등심 400gx2, 불고기 400g, 국거리 400g","spec":"","retail":null,"online":null,"desc":"","supply":207000,"recommended":false},{"code":"F01","cat":"식품","subcat":"과일","name":"중대혼합 2.5kg 8-9과","spec":"","retail":null,"online":null,"desc":"","supply":30000,"recommended":false},{"code":"F02","cat":"식품","subcat":"과일","name":"중대혼합 4.5kg 14-16과","spec":"","retail":null,"online":null,"desc":"","supply":52000,"recommended":false},{"code":"F03","cat":"식품","subcat":"과일","name":"[1호] 중소과 16과 4kg","spec":"","retail":null,"online":null,"desc":"","supply":60000,"recommended":false},{"code":"F04","cat":"식품","subcat":"과일","name":"[2호] 중과 14과 4kg","spec":"","retail":null,"online":null,"desc":"","supply":64000,"recommended":false},{"code":"F05","cat":"식품","subcat":"과일","name":"[3호] 중대과 12과 4kg","spec":"","retail":null,"online":null,"desc":"","supply":89000,"recommended":false},{"code":"F06","cat":"식품","subcat":"과일","name":"[4호] 중소과 20과내외 5kg","spec":"","retail":null,"online":null,"desc":"","supply":72000,"recommended":false},{"code":"F07","cat":"식품","subcat":"과일","name":"[5호] 중과 17~18과 5kg","spec":"","retail":null,"online":null,"desc":"","supply":78000,"recommended":false},{"code":"F08","cat":"식품","subcat":"과일","name":"[6호] 중대과 15과 5kg","spec":"","retail":null,"online":null,"desc":"","supply":102000,"recommended":false},{"code":"F09","cat":"식품","subcat":"과일","name":"(8-10과) 5kg 대과","spec":"","retail":null,"online":null,"desc":"","supply":39000,"recommended":false},{"code":"F10","cat":"식품","subcat":"과일","name":"(5-7과) 5kg 특대과","spec":"","retail":null,"online":null,"desc":"","supply":40000,"recommended":false},{"code":"F11","cat":"식품","subcat":"과일","name":"(11-12과) 7.5kg 대과","spec":"","retail":null,"online":null,"desc":"","supply":49000,"recommended":false},{"code":"F12","cat":"식품","subcat":"과일","name":"(7-10과) 7.5kg 특대과","spec":"","retail":null,"online":null,"desc":"","supply":54000,"recommended":false},{"code":"F13","cat":"식품","subcat":"과일","name":"[1호] 배 9과","spec":"","retail":null,"online":null,"desc":"","supply":48000,"recommended":false},{"code":"F14","cat":"식품","subcat":"과일","name":"[2호] 사과 2과 & 배 2과 & 자몽 3과 & 샤인머스켓 1수","spec":"","retail":null,"online":null,"desc":"","supply":48000,"recommended":false},{"code":"F15","cat":"식품","subcat":"과일","name":"[3호] 사과 3과 & 배 3과 & 자몽 3과","spec":"","retail":null,"online":null,"desc":"","supply":48000,"recommended":false},{"code":"F16","cat":"식품","subcat":"과일","name":"[4호] 사과 3과 & 배 2과 & 샤인머스켓 2수","spec":"","retail":null,"online":null,"desc":"","supply":51000,"recommended":false},{"code":"F17","cat":"식품","subcat":"과일","name":"[5호] 사과 5과 & 배 4과","spec":"","retail":null,"online":null,"desc":"","supply":54000,"recommended":false},{"code":"F18","cat":"식품","subcat":"과일","name":"[6호] 특대과 사과 9과","spec":"","retail":null,"online":null,"desc":"","supply":60000,"recommended":false},{"code":"F19","cat":"식품","subcat":"과일","name":"마음과일 1호 - 사과 6과 (실중량 1.7kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":21000,"recommended":false},{"code":"F20","cat":"식품","subcat":"과일","name":"마음과일 2호 - 사과 3 + 배 3 (실중량 2.5kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":22000,"recommended":false},{"code":"F21","cat":"식품","subcat":"과일","name":"마음과일 3호 - 배 6과 (실중량 3.3kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":24000,"recommended":false},{"code":"F22","cat":"식품","subcat":"과일","name":"자연애 1호 - 사과 9과 (실중량 2.5kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":27000,"recommended":false},{"code":"F23","cat":"식품","subcat":"과일","name":"자연애 2호 - 사과 5 + 배 4 (실중량 3.6kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":28000,"recommended":false},{"code":"F24","cat":"식품","subcat":"과일","name":"자연애 3호 - 사과 4 + 배 5 (실중량 3.8kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":29000,"recommended":false},{"code":"F25","cat":"식품","subcat":"과일","name":"자연애 4호 - 사과 6 + 배 3 (실중량 3.3kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":28000,"recommended":false},{"code":"F26","cat":"식품","subcat":"과일","name":"자연애 5호 - 사과 3 + 배 6 (실중량 4.1kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":29000,"recommended":false},{"code":"F27","cat":"식품","subcat":"과일","name":"자연듬뿍 1호 - 사과 12과 (실중량 3.3kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":40000,"recommended":false},{"code":"F28","cat":"식품","subcat":"과일","name":"자연듬뿍 2호 - 사과 6 + 배 6 (실중량 5kg 내외)","spec":"","retail":null,"online":null,"desc":"","supply":44000,"recommended":false},{"code":"F29","cat":"식품","subcat":"과일","name":"소과 12구 1팩 (개당 30-40g)","spec":"","retail":null,"online":null,"desc":"","supply":26000,"recommended":false},{"code":"F30","cat":"식품","subcat":"과일","name":"소과 12구 3팩 (개당 30-40g)","spec":"","retail":null,"online":null,"desc":"","supply":66000,"recommended":false},{"code":"F31","cat":"식품","subcat":"과일","name":"중과 10구 1팩 (개당 40-50g)","spec":"","retail":null,"online":null,"desc":"","supply":29000,"recommended":false},{"code":"F32","cat":"식품","subcat":"과일","name":"중과 10구 3팩 (개당 40-50g)","spec":"","retail":null,"online":null,"desc":"","supply":68000,"recommended":false},{"code":"F33","cat":"식품","subcat":"과일","name":"로얄과 24개입 (개당 60~80g)","spec":"","retail":null,"online":null,"desc":"","supply":69000,"recommended":false},{"code":"F34","cat":"식품","subcat":"과일","name":"프리미엄과 8개입 (개당 80g 이상)","spec":"","retail":null,"online":null,"desc":"","supply":43000,"recommended":false},{"code":"F35","cat":"식품","subcat":"과일","name":"프리미엄과 16개입 (개당 80g 이상)","spec":"","retail":null,"online":null,"desc":"","supply":82000,"recommended":false},{"code":"F36","cat":"식품","subcat":"과일","name":"프리미엄과 24개입 (개당 80g 이상)","spec":"","retail":null,"online":null,"desc":"","supply":101000,"recommended":false},{"code":"G01","cat":"식품","subcat":"곶감","name":"[1호] 곶감 반건시 소 15입 (개당 50g~60g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":23000,"recommended":false},{"code":"G02","cat":"식품","subcat":"곶감","name":"[2호] 곶감 반건시 중 15입 (개당 60g~70g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":25000,"recommended":false},{"code":"G03","cat":"식품","subcat":"곶감","name":"[3호] 곶감 반건시 대 15입 (개당 70g~80g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":27000,"recommended":false},{"code":"G04","cat":"식품","subcat":"곶감","name":"[4호] 곶감 반건시 소 18입 (개당 50g~60g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":26000,"recommended":false},{"code":"G05","cat":"식품","subcat":"곶감","name":"[5호] 곶감 반건시 중 18입 (개당 60g~70g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":28000,"recommended":false},{"code":"G06","cat":"식품","subcat":"곶감","name":"[6호] 곶감 반건시 대 18입 (개당 70g~80g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":31000,"recommended":false},{"code":"G07","cat":"식품","subcat":"곶감","name":"[7호] 곶감 반건시 소 24입 (개당 50g~60g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":31000,"recommended":false},{"code":"G08","cat":"식품","subcat":"곶감","name":"[8호] 곶감 반건시 중 24입 (개당 60g~70g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":34000,"recommended":false},{"code":"G09","cat":"식품","subcat":"곶감","name":"[9호] 곶감 반건시 대 24입 (개당 70g~80g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":39000,"recommended":false},{"code":"G10","cat":"식품","subcat":"곶감","name":"[10호] 곶감 반건시 특 20입 (개당 80g 이상)","spec":"","retail":null,"online":null,"desc":"","supply":39000,"recommended":false},{"code":"G11","cat":"식품","subcat":"곶감","name":"[11호] 곶감 반건시 소 15입 1+1 (개당 50g~60g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":43000,"recommended":false},{"code":"G12","cat":"식품","subcat":"곶감","name":"[12호] 곶감 반건시 중 15입 1+1 (개당 60g~70g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":48000,"recommended":false},{"code":"G13","cat":"식품","subcat":"곶감","name":"[13호] 곶감 반건시 대 15입 1+1 (개당 70g~80g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":51000,"recommended":false},{"code":"G14","cat":"식품","subcat":"곶감","name":"[14호] 곶감 반건시 소 18입 1+1 (개당 50g~60g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":47000,"recommended":false},{"code":"G15","cat":"식품","subcat":"곶감","name":"[15호] 곶감 반건시 중 18입 1+1 (개당 60g~70g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":52000,"recommended":false},{"code":"G16","cat":"식품","subcat":"곶감","name":"[16호] 곶감 반건시 대 18입 1+1 (개당 70g~80g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":58000,"recommended":false},{"code":"G17","cat":"식품","subcat":"곶감","name":"[17호] 곶감 반건시 소 24입 1+1 (개당 50g~60g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":58000,"recommended":false},{"code":"G18","cat":"식품","subcat":"곶감","name":"[18호] 곶감 반건시 중 24입 1+1 (개당 60g~70g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":62000,"recommended":false},{"code":"G19","cat":"식품","subcat":"곶감","name":"[19호] 곶감 반건시 대 24입 1+1 (개당 70g~80g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":70000,"recommended":false},{"code":"G20","cat":"식품","subcat":"곶감","name":"[20호] 곶감 반건시 특 20입 1+1 (개당 80g 이상)","spec":"","retail":null,"online":null,"desc":"","supply":67000,"recommended":false},{"code":"G21","cat":"식품","subcat":"곶감","name":"[21호] 곶감 반건시 실속 20입 (개당 35g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":17000,"recommended":false},{"code":"G22","cat":"식품","subcat":"곶감","name":"[22호] 곶감 반건시 실속 30입 (개당 35g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":23000,"recommended":false},{"code":"G23","cat":"식품","subcat":"곶감","name":"[23호] 곶감 호두말이 20입 (총중량 330g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":22000,"recommended":false},{"code":"G24","cat":"식품","subcat":"곶감","name":"[24호] 곶감 호두말이 30입 (총중량 450g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":30000,"recommended":false},{"code":"G25","cat":"식품","subcat":"곶감","name":"[25호] 대봉곶감 반건시 24입(보자기X) (개당 75g 내외)","spec":"","retail":null,"online":null,"desc":"","supply":46000,"recommended":false},{"code":"L01","cat":"식품","subcat":"LA꽃갈비","name":"프리미엄 LA꽃갈비 2kg 선물세트","spec":"","retail":null,"online":null,"desc":"","supply":68000,"recommended":false},{"code":"L02","cat":"식품","subcat":"LA꽃갈비","name":"초이스 LA꽃갈비 2kg 선물세트","spec":"","retail":null,"online":null,"desc":"","supply":100000,"recommended":false},{"code":"S01","cat":"식품","subcat":"수산물","name":"영광굴비 1호","spec":"","retail":null,"online":null,"desc":"","supply":45000,"recommended":false},{"code":"S02","cat":"식품","subcat":"수산물","name":"영광굴비 2호","spec":"","retail":null,"online":null,"desc":"","supply":46000,"recommended":false},{"code":"S03","cat":"식품","subcat":"수산물","name":"전복세트 1호","spec":"","retail":null,"online":null,"desc":"","supply":36000,"recommended":false},{"code":"S04","cat":"식품","subcat":"수산물","name":"전복세트 2호","spec":"","retail":null,"online":null,"desc":"","supply":65000,"recommended":false},{"code":"S05","cat":"식품","subcat":"수산물","name":"대왕 민물장어 1호 세트","spec":"","retail":null,"online":null,"desc":"","supply":33000,"recommended":false},{"code":"S06","cat":"식품","subcat":"수산물","name":"대왕 민물장어 2호 세트","spec":"","retail":null,"online":null,"desc":"","supply":54000,"recommended":false}];
 const SUBCATS = ["한방", "정육/고기세트", "과일", "곶감", "LA꽃갈비", "수산물"];
 const PRODUCT_BY_CODE = {};
@@ -780,6 +802,11 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
 
   let saved = false;
   try{
+    await fsdb.collection('orders').add(order);
+    saved = true;
+  }catch(e){ /* Firestore save failed; fall back to file only */ }
+
+  try{
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '주문내역');
@@ -787,16 +814,16 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
     const blob = new Blob([arrayBuf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     saveBlob(blob, '추석_주문서_' + order.ordererName + '.xlsx');
     saved = true;
-  }catch(e){ /* fall through to failure message */ }
+  }catch(e){ /* fall through to failure message if nothing else worked */ }
 
   const resultEl = document.getElementById('submitResult');
   if(saved){
-    resultEl.innerHTML = '<div class="confirm-box"><b>주문서 파일이 다운로드되었습니다.</b><br>합계 ' + won(order.grandTotal) +
-      ' · 수령인 ' + order.recipientCount + '명<br>위 계좌로 입금해주신 뒤, 입금 내역과 함께 <b>010-6508-5901</b>로 연락 주시면 확인 후 순차 발송해드립니다.</div>';
+    resultEl.innerHTML = '<div class="confirm-box"><b>주문이 접수되었습니다.</b><br>합계 ' + won(order.grandTotal) +
+      ' · 수령인 ' + order.recipientCount + '명<br>위 계좌로 입금해주신 뒤, 입금 내역과 함께 <b>010-6508-5901</b>로 연락 주시면 확인 후 순차 발송해드립니다. (주문서 파일도 함께 다운로드되었어요)</div>';
     btn.textContent = '제출 완료';
     alert('입금 후 입금 내역과 함께 010-6508-5901로 연락 주세요.\n다운로드된 주문서 파일도 함께 보내주시면 확인이 더 빨라요.');
   } else {
-    resultEl.innerHTML = '<div class="notice"><span>⚠️</span><div>파일 생성에 실패했습니다. 다시 시도해주시거나, 담당자에게 직접 연락해주세요.</div></div>';
+    resultEl.innerHTML = '<div class="notice"><span>⚠️</span><div>제출 처리에 실패했습니다. 다시 시도해주시거나, 담당자에게 직접 연락해주세요.</div></div>';
     btn.textContent = '주문 제출';
     btn.disabled = false;
   }
@@ -826,6 +853,50 @@ function loadAdmin(){
   }
   adminLoaded = true;
   renderRecAdmin();
+  loadLiveOrders();
+}
+
+async function loadLiveOrders(){
+  const statusEl = document.getElementById('liveAdminStatus');
+  const wrap = document.getElementById('liveAdminWrap');
+  const exportBtn = document.getElementById('liveExportBtn');
+  try{
+    const snap = await fsdb.collection('orders').orderBy('submittedAt','desc').limit(500).get();
+    if(snap.empty){
+      statusEl.textContent = '아직 접수된 주문이 없습니다.';
+      return;
+    }
+    let total = 0;
+    let rows = '';
+    const flatRows = [];
+    snap.forEach(doc => {
+      const o = doc.data();
+      total += o.grandTotal || 0;
+      rows += '<tr><td>' + new Date(o.submittedAt).toLocaleString('ko-KR') + '</td><td>' + escapeHtml(o.ordererName||'') +
+        '</td><td>' + escapeHtml(o.ordererPhone||'') + '</td><td>' + (o.recipientCount||0) + '명</td><td class="num">' + won(o.grandTotal||0) + '</td></tr>';
+      (o.items||[]).forEach(it => {
+        flatRows.push({
+          '상품명': it.productName, '수량': it.qty,
+          '주문자 성함': o.ordererName, '주문자 연락처': o.ordererPhone,
+          '수령인 성함': it.name, '수령인 연락처': it.phone,
+          '수령인 우편번호': it.zip||'', '수령인 주소': it.addr
+        });
+      });
+    });
+    statusEl.textContent = snap.size + '건 접수 · 합계 ' + won(total);
+    wrap.innerHTML = '<table class="preview"><thead><tr><th>접수시각</th><th>주문자</th><th>연락처</th><th>수령인수</th><th>합계</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    exportBtn.style.display = '';
+    exportBtn.onclick = () => {
+      const ws = XLSX.utils.json_to_sheet(flatRows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '주문내역');
+      const arrayBuf = XLSX.write(wb, {type:'array', bookType:'xlsx'});
+      const blob = new Blob([arrayBuf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      saveBlob(blob, '접수_주문내역.xlsx');
+    };
+  }catch(e){
+    statusEl.textContent = '불러오는 중 문제가 발생했습니다.';
+  }
 }
 
 function renderRecAdmin(){
