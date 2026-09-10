@@ -226,6 +226,23 @@
   .rec-admin-item .code-badge{flex:0 0 auto;}
   .rec-admin-item span.nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
+  .order-cta{
+    display:block;width:100%;text-align:left;cursor:pointer;
+    margin:22px 0 4px;padding:22px 26px;border:none;border-radius:6px;
+    background:linear-gradient(100deg, var(--persimmon) 0%, #C25439 100%);
+    color:#FFF6F2;font-family:'Noto Sans KR',sans-serif;
+    box-shadow:0 6px 18px rgba(168,63,43,0.22);transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .order-cta:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(168,63,43,0.3);}
+  .order-cta-main{display:block;font-family:'Noto Serif KR',serif;font-weight:900;font-size:24px;letter-spacing:-0.01em;}
+  .order-cta-sub{display:block;margin-top:6px;font-size:13.5px;color:#F6DCD4;}
+  .order-cta-arrow{display:inline-block;margin-top:14px;padding:8px 18px;border-radius:20px;
+    background:rgba(255,255,255,0.18);font-weight:700;font-size:14px;}
+  @media(max-width:640px){
+    .order-cta{padding:20px;margin:18px 0 4px;}
+    .order-cta-main{font-size:20px;}
+    .order-cta-sub{font-size:12.5px;}
+  }
   footer{padding:26px 0 60px;text-align:center;color:var(--ink-soft);font-size:12px;}
 
   @media(max-width:640px){
@@ -264,6 +281,14 @@
       </div>
     </div>
   </section>
+
+  <div class="wrap">
+    <button type="button" class="order-cta" data-tab="order">
+      <span class="order-cta-main">특판 주문 바로가기</span>
+      <span class="order-cta-sub">여러 곳으로 한 번에 보내시나요? 수령인 명단만 있으면 5분이면 끝나요</span>
+      <span class="order-cta-arrow">주문하러 가기 →</span>
+    </button>
+  </div>
 
   <div class="chipnav">
     <div class="wrap" id="chipRow"></div>
@@ -449,6 +474,10 @@ function slug(s){ return s.replace(/[^a-zA-Z0-9가-힣]/g,''); }
 /* ---------------- tabs ---------------- */
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+document.querySelector('.order-cta').addEventListener('click', () => {
+  switchTab('order');
+  window.scrollTo({top: 0, behavior: 'smooth'});
 });
 
 function switchTab(tab){
