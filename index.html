@@ -167,6 +167,12 @@
   .order-body{padding:34px 0 80px;}
   .panel{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;margin-bottom:20px;}
   .panel h3{font-size:15.5px;margin:0 0 14px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .step-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+    background:var(--night);color:var(--white);font-family:'Noto Serif KR',serif;font-weight:700;font-size:13px;flex:0 0 auto;}
+  @keyframes fieldFlash{ 0%,100%{background:var(--paper);border-color:var(--line);} 50%{background:var(--persimmon-soft);border-color:var(--persimmon);} }
+  .field-flash{animation:fieldFlash .35s ease-in-out 3;}
+  @keyframes panelFlash{ 0%,100%{border-color:var(--line);box-shadow:none;} 50%{border-color:var(--persimmon);box-shadow:0 0 0 3px var(--persimmon-soft);} }
+  .panel-flash{animation:panelFlash .35s ease-in-out 3;}
   .panel h3 .section-tick{width:4px;height:15px;}
 
   .field-row{display:flex;gap:14px;flex-wrap:wrap;}
@@ -385,16 +391,16 @@
       <div><b>9월 16일(수)까지 주문하시면 추석 전 수령이 가능합니다.</b> 16일 이후에도 주문은 계속 받고 있으나, 추석 전 배송이 어려울 수 있는 점 미리 안내드립니다. 실시간으로 품절되는 상품이 있어, 품절 상품이 있으면 개별로 연락드리겠습니다. 본 사이트는 공장 직송으로 영업일 기준 2~4일 배송될 수 있는 점 양해 부탁드립니다.</div>
     </div>
 
-    <div class="panel">
-      <h3><div class="section-tick"></div>주문자 정보</h3>
+    <div class="panel" id="stepOrderer">
+      <h3><span class="step-num">1</span>주문자 정보</h3>
       <div class="field-row">
         <div class="field"><label for="ordererName">주문자명</label><input id="ordererName" placeholder="예: 홍길동 (담당자명 또는 회사명)"></div>
         <div class="field"><label for="ordererPhone">주문자 연락처</label><input id="ordererPhone" placeholder="예: 010-0000-0000"></div>
       </div>
     </div>
 
-    <div class="panel">
-      <h3><div class="section-tick"></div>수령인 등록 방식</h3>
+    <div class="panel" id="stepRecipients">
+      <h3><span class="step-num">2</span>수령인 등록</h3>
       <div class="mode-tabs">
         <button class="mode-btn active" data-mode="small">소량 주문 · 직접 입력</button>
         <button class="mode-btn" data-mode="bulk">대량 주문 · 엑셀 업로드</button>
@@ -438,13 +444,13 @@
     </div>
 
     <div class="panel" id="previewPanel" style="display:none;">
-      <h3><div class="section-tick"></div>주문 내역 확인</h3>
+      <h3><span class="step-num">3</span>주문 내역 확인</h3>
       <div id="previewTableWrap"></div>
       <div class="totals" id="totalsWrap"></div>
     </div>
 
     <div class="panel">
-      <h3><div class="section-tick"></div>입금 안내</h3>
+      <h3><span class="step-num">4</span>입금 안내</h3>
       <div class="pay-card">
         <div>🏦</div>
         <div>
@@ -455,8 +461,8 @@
     </div>
 
     <div class="panel">
-      <h3><div class="section-tick"></div>제출</h3>
-      <button class="btn btn-primary" id="submitBtn" disabled>주문 제출</button>
+      <h3><span class="step-num">5</span>제출</h3>
+      <button class="btn btn-primary" id="submitBtn">주문 제출</button>
       <div id="submitResult" style="margin-top:16px;"></div>
     </div>
 
@@ -827,7 +833,6 @@ function renderPreview(){
 
   if(parsedRows.length === 0){
     panel.style.display = 'none';
-    submitBtn.disabled = true;
     return;
   }
   panel.style.display = '';
@@ -861,11 +866,6 @@ function renderPreview(){
     '<div class="t-item"><span>수령인 수</span><b>' + recipientCount + '명</b></div>' +
     '<div class="t-item grand"><span>전체 합계</span><b>' + won(grandTotal) + '</b></div>';
 
-  const hasValidRow = parsedRows.some(r => !r.error);
-  const ordererName = document.getElementById('ordererName').value.trim();
-  const ordererPhone = document.getElementById('ordererPhone').value.trim();
-  submitBtn.disabled = !(hasValidRow && ordererName && ordererPhone);
-
   window.__orderState = { grandTotal, recipientCount, recipientTotals };
 }
 
@@ -881,8 +881,43 @@ function genOrderCode(){
   return s;
 }
 
+function flashField(el){
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.classList.remove('field-flash'); void el.offsetWidth;
+  el.classList.add('field-flash');
+  el.focus();
+  setTimeout(() => el.classList.remove('field-flash'), 1100);
+}
+function flashPanel(el){
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.classList.remove('panel-flash'); void el.offsetWidth;
+  el.classList.add('panel-flash');
+  setTimeout(() => el.classList.remove('panel-flash'), 1100);
+}
+
 document.getElementById('submitBtn').addEventListener('click', async () => {
   const btn = document.getElementById('submitBtn');
+
+  const ordererNameEl = document.getElementById('ordererName');
+  const ordererPhoneEl = document.getElementById('ordererPhone');
+  const hasValidRow = parsedRows.some(r => !r.error);
+
+  if(!ordererNameEl.value.trim()){
+    alert('아직 채우지 않은 항목이 있어요.\n① 주문자 성함을 입력해주세요.');
+    flashField(ordererNameEl);
+    return;
+  }
+  if(!ordererPhoneEl.value.trim()){
+    alert('아직 채우지 않은 항목이 있어요.\n① 주문자 연락처를 입력해주세요.');
+    flashField(ordererPhoneEl);
+    return;
+  }
+  if(!hasValidRow){
+    alert('아직 채우지 않은 항목이 있어요.\n② 수령인을 1명 이상 등록해주세요.');
+    flashPanel(document.getElementById('stepRecipients'));
+    return;
+  }
+
   btn.disabled = true;
   btn.textContent = '제출 중...';
 
